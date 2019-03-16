@@ -31,6 +31,12 @@ Initialize the database.
 airflow initdb
 ```
 
+Now, we change the default `dag` folder. So let's change `dags_folder` setting in the `airflow/airflow.cfg`.
+
+```
+dags_folder = /mnt/c/Users/ico/Documents/works/airflow-ml-exercises/tutorial
+```
+
 Run web server.
 
 ```
