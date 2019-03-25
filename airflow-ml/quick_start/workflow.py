@@ -17,7 +17,7 @@ default_args = {
     "retry_delay": timedelta(minutes=5)
 }
 
-dag = DAG("01_basic_usage", default_args=default_args)
+dag = DAG("airflow-ml-quickstart", default_args=default_args)
 
 
 def print_context(ds, **kwargs):
