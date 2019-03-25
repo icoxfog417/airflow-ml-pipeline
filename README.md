@@ -5,7 +5,7 @@ The repository to learn Machine Learning with Airflow
 ## Setup
 
 Set `AIRFLOW_HOME` to current folder (if you need).  
-This setting is required when you execute `airflow` commands.
+This setting is required when you execute `airflow` commands (recommend to use [.env](https://pipenv.readthedocs.io/en/latest/advanced/#automatic-loading-of-env) file).
 
 ```
 mkdir airflow
@@ -34,7 +34,7 @@ airflow initdb
 Now, we change the default `dag` folder. So let's change `dags_folder` setting in the `airflow/airflow.cfg`.
 
 ```
-dags_folder = /mnt/c/Users/ico/Documents/works/airflow-ml-exercises/tutorial
+dags_folder = /your_folder/airflow-ml-exercises/tutorial
 ```
 
 Run web server.
@@ -42,4 +42,3 @@ Run web server.
 ```
 airflow webserver --port 8080
 ```
-
