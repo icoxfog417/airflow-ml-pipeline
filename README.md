@@ -34,7 +34,7 @@ airflow initdb
 Now, we change the default `dag` folder. So let's change `dags_folder` setting in the `airflow/airflow.cfg`.
 
 ```
-dags_folder = /your_folder/airflow-ml-exercises/airflow-ml
+dags_folder = /your_folder/airflow-ml-exercises/airflow_ml
 ```
 
 Run web server.
@@ -48,4 +48,3 @@ If you want to refresh list of DAGs, execute following command.
 ```
 python -c "from airflow.models import DagBag; d = DagBag();"
 ```
-
