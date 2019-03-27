@@ -1,4 +1,5 @@
 from datetime import datetime
+from zipfile import ZipFile
 
 
 class Document():
@@ -103,3 +104,47 @@ class Document():
         )
 
         return instance
+
+    @property
+    def is_outdated(self):
+        if not self.edinet_code and self.withdraw_status == 0:
+            return True
+        else:
+            return False
+
+    @property
+    def is_withdrew(self):
+        if not self.edinet_code and self.withdraw_status == 2:
+            return True
+        else:
+            return False
+
+    def get_pdf(self, save_dir, file_name=""):
+        from airflow_ml.edinet.api import DocumentClient
+        client = DocumentClient()
+        response_type = "2"
+        path = client.get(save_dir, self.document_id, response_type, file_name)
+        return path
+
+    def get_xbrl(self, save_dir, file_name=""):
+        from airflow_ml.edinet.api import DocumentClient
+        client = DocumentClient()
+        response_type = "1"
+        path = client.get(save_dir, self.document_id, response_type, file_name)
+        with ZipFile(path, "r") as zip:
+            files = zip.namelist()
+            xbrl_file = ""
+            for file_name in files:
+                if file_name.startswith("XBRL/PublicDoc/") and \
+                   file_name.endswith(".xbrl"):
+                    xbrl_file = file_name
+                    break
+
+            if xbrl_file:
+                xbrl_path = path.with_suffix(".xbrl")
+                with xbrl_path.open("wb") as f:
+                    f.write(zip.read(xbrl_file))
+                path.unlink()
+                path = xbrl_path
+
+        return path
