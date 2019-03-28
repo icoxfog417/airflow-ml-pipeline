@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+import tempfile
 from datetime import datetime
 from zipfile import ZipFile
 import requests
@@ -78,11 +79,7 @@ class DocumentClient(Client):
     def __init__(self):
         super().__init__(target="documents/{}")
 
-    def get(self, save_dir, document_id, response_type, file_name=""):
-        save_path = Path(save_dir)
-        if not save_path.exists():
-            raise Exception("Save directory does not exist.")
-
+    def get(self, document_id, response_type, save_dir="", file_name=""):
         url = self.endpoint.format(document_id)
         params = {
             "type": response_type
@@ -106,21 +103,27 @@ class DocumentClient(Client):
                     _file_name = document_id + ext
 
             chunk_size = 1024
-            save_path = save_path.joinpath(_file_name)
+            if save_dir:
+                save_path = Path(save_dir).joinpath(_file_name)
+            else:
+                tmpf = tempfile.NamedTemporaryFile(
+                        suffix="__" + _file_name, delete=False)
+                save_path = Path(tmpf.name)
+
             with save_path.open(mode="wb") as f:
                 for chunk in r.iter_content(chunk_size):
                     f.write(chunk)
 
             return save_path
 
-    def get_pdf(self, save_dir, document_id, file_name=""):
+    def get_pdf(self, document_id, save_dir="", file_name=""):
         response_type = "2"
-        path = self.get(save_dir, document_id, response_type, file_name)
+        path = self.get(document_id, response_type, save_dir, file_name)
         return path
 
-    def get_xbrl(self, save_dir, document_id, file_name=""):
+    def get_xbrl(self, document_id, save_dir="", file_name=""):
         response_type = "1"
-        path = self.get(save_dir, document_id, response_type, file_name)
+        path = self.get(document_id, response_type, save_dir, file_name)
         with ZipFile(path, "r") as zip:
             files = zip.namelist()
             xbrl_file = ""

@@ -18,11 +18,11 @@ class TestAPI(unittest.TestCase):
     def test_get_document(self):
         _dir = os.path.dirname(__file__)
         client = api.DocumentClient()
-        file_path = client.get(_dir, "S100FGR9", response_type=1)
+        file_path = client.get("S100FGR9", response_type=1, save_dir=_dir)
         self.assertTrue(os.path.exists(file_path))
         os.remove(file_path)
 
-        file_path = client.get(_dir, "S100FGR9", response_type=2)  # PDF
+        file_path = client.get("S100FGR9", response_type=2, save_dir=_dir)  # PDF
         self.assertTrue(os.path.exists(file_path))
         os.remove(file_path)
 
@@ -32,14 +32,13 @@ class TestAPI(unittest.TestCase):
         self.assertGreater(len(documents), 0)
 
         d = documents[0]
-        _dir = os.path.dirname(__file__)
 
-        path = d.get_pdf(_dir)
+        path = d.get_pdf()
         self.assertTrue(os.path.exists(path))
         self.assertTrue(str(path).endswith(".pdf"))
         os.remove(path)
 
-        path = d.get_xbrl(_dir)
+        path = d.get_xbrl()
         self.assertTrue(os.path.exists(path))
         self.assertTrue(str(path).endswith(".xbrl"))
         os.remove(path)

@@ -118,12 +118,12 @@ class Document():
         else:
             return False
 
-    def get_pdf(self, save_dir, file_name=""):
+    def get_pdf(self, save_dir="", file_name=""):
         from airflow_ml.edinet.api import DocumentClient
         client = DocumentClient()
-        return client.get_pdf(save_dir, self.document_id, file_name)
+        return client.get_pdf(self.document_id, save_dir, file_name)
 
-    def get_xbrl(self, save_dir, file_name=""):
+    def get_xbrl(self, save_dir="", file_name=""):
         from airflow_ml.edinet.api import DocumentClient
         client = DocumentClient()
-        return client.get_xbrl(save_dir, self.document_id, file_name)
+        return client.get_xbrl(self.document_id, save_dir, file_name)

@@ -7,6 +7,7 @@ from airflow import DAG
 from airflow.models import BaseOperator
 from airflow.sensors.base_sensor_operator import BaseSensorOperator
 from airflow.utils.decorators import apply_defaults
+from airflow.models import Variable
 import airflow_ml.edinet.api as api
 
 
@@ -38,8 +39,7 @@ class EDINETGetDocumentsOperator(BaseOperator):
 class EDINETGetDocumentSensor(BaseSensorOperator):
 
     @apply_defaults
-    def __init__(self, save_dir, document_type="xbrl", *args, **kwargs):
-        self.save_dir = save_dir
+    def __init__(self, document_type="xbrl", *args, **kwargs):
         self.document_type = document_type
         self._next_document_index = -1
         super().__init__(*args, **kwargs)
@@ -54,15 +54,27 @@ class EDINETGetDocumentSensor(BaseSensorOperator):
             self._next_document_index = 0
 
         client = api.DocumentClient()
+        default_path = os.path.join(os.path.dirname(__file__), "../../data")
+
+        gcp_bucket = Variable.get("gcp_bucket", default_var="")
+        save_dir = default_path if not gcp_bucket else ""
+
         document_id = document_ids[self._next_document_index]
         self.log.info("Dealing {}/{} documents.".format(
                         (self._next_document_index + 1), len(document_ids)))
         if self.document_type == "pdf":
-            client.get_pdf(self.save_dir, document_id)
+            path = client.get_pdf(document_id, save_dir)
         else:
-            client.get_xbrl(self.save_dir, document_id)
+            path = client.get_xbrl(document_id, save_dir)
 
-        self._next_document_index +=1
+        if gcp_bucket:
+            from google.cloud import storage
+            client = storage.Client()
+            bucket = client.get_bucket(gcp_bucket)
+            exact_name = str(path).split("__")[-1]
+            bucket.blob(exact_name).upload_from_filename(filename=str(path))
+
+        self._next_document_index += 1
 
         if self._next_document_index == len(document_ids):
             return True
@@ -85,8 +97,6 @@ default_args = {
 
 
 dag = DAG("airflow-ml-edinet", default_args=default_args)
-default_path = os.path.join(os.path.dirname(__file__), "../../data")
-SAVE_DIR = os.getenv("SAVE_DIR", default_path)
 
 
 edinet_get_document_list = EDINETGetDocumentsOperator(
@@ -95,7 +105,6 @@ edinet_get_document_list = EDINETGetDocumentsOperator(
                                 provide_context=True,
                                 dag=dag)
 edinet_get_document = EDINETGetDocumentSensor(
-                                save_dir=SAVE_DIR,
                                 task_id="edinet_get_document",
                                 poke_interval=60,
                                 dag=dag)
