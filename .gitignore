@@ -105,3 +105,4 @@ venv.bak/
 airflow
 .vscode
 .DS_Store
+data/
