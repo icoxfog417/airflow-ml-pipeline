@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timedelta
 from unittest import mock
 from airflow.models import DAG, DagBag, DagRun
 from airflow.models import DagModel, errors, Pool, SlaMiss, TaskInstance
@@ -61,15 +62,59 @@ class TestDagRun(unittest.TestCase):
         clear_db_sla_miss()
         clear_db_errors()
 
-    def test_schedule(self):
-        dag = DAG(
-            'test_scheduler_dagrun_once',
-            start_date=timezone.datetime(2015, 1, 1),
-            schedule_interval="@once")
+    def test_daily_schedule_start(self):
+        self._test_schedule("@daily", lambda delta: delta < -1)
 
-        scheduler = SchedulerJob()
-        dag.clear()
-        dr = scheduler.create_dag_run(dag)
-        self.assertIsNotNone(dr)
-        dr = scheduler.create_dag_run(dag)
-        self.assertIsNone(dr)
+    def test_hourly_schedule_start(self):
+        self._test_schedule("@hourly", lambda delta: delta < 0)
+
+    def test_daily_schedule_end(self):
+        self._test_schedule("@daily", lambda delta: delta > -2, False)
+
+    def test_hourly_schedule_end(self):
+        self._test_schedule("@hourly", lambda delta: delta > -1, False)
+
+    def _test_schedule(self, interval, schedule_criteria, start_date=True):
+        today = datetime.today()
+
+        for delta in (-2, -1, 0, 1, 2):
+            date = today + timedelta(days=delta)
+            description = "today"
+            if delta == -2:
+                description = "day_before_yesterday"
+            elif delta == -1:
+                description = "yesterday"
+            elif delta == 1:
+                description = "tomorrow"
+            elif delta == 2:
+                description = "day_after_tomorrow"
+
+            if start_date:
+                dag = DAG(f"dag_starts_{description}",
+                          start_date=date,
+                          schedule_interval=interval,
+                          catchup=False)
+            else:
+                dag = DAG(f"dag_starts_{description}",
+                          start_date=(today + timedelta(days=-10)),
+                          end_date=date,
+                          schedule_interval=interval,
+                          catchup=False)
+
+            scheduler = SchedulerJob()
+            dag.clear()
+            dr = scheduler.create_dag_run(dag)
+            execution_date = "-" if dr is None else dr.execution_date.strftime("%Y/%m/%d %H:%M:%S")
+            end_date = "-" if dag.end_date is None else dag.end_date.strftime("%Y/%m/%d %H:%M:%S")
+
+            date_description = (f'today={today.strftime("%Y/%m/%d %H:%M:%S")}, ',
+                                f'start_date={dag.start_date.strftime("%Y/%m/%d %H:%M:%S")}, ',
+                                f'end_date={end_date}, ',
+                                f'execution_date={execution_date}')
+
+            if schedule_criteria(delta):
+                self.assertIsNotNone(dr)
+                print(f"{description} is scheduled ({date_description}).")
+            else:
+                self.assertIsNone(dr)
+                print(f"{description} is not scheduled ({date_description}).")

@@ -1,11 +1,7 @@
 from datetime import datetime, timedelta
-import time
-import random
 from airflow import DAG
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
-from airflow.operators.python_operator import PythonOperator
-from pprint import pprint
 
 
 class ShowDateOperator(BaseOperator):
