@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 from airflow.models import DAG, DagBag, DagRun
 from airflow.models import DagModel, errors, Pool, SlaMiss, TaskInstance
@@ -35,7 +35,7 @@ def clear_db_pools():
         session.query(Pool).delete()
 
 
-class TestDagRun(unittest.TestCase):
+class TestScheduler(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -74,47 +74,59 @@ class TestDagRun(unittest.TestCase):
     def test_hourly_schedule_end(self):
         self._test_schedule("@hourly", lambda delta: delta > -1, False)
 
-    def _test_schedule(self, interval, schedule_criteria, start_date=True):
+    def _test_schedule(self, interval, schedule_criteria, start_date=True,
+                       default_start_date=-10):
+        print("Test {} date of {} schedule job.".format(
+            "start" if start_date else "end",
+            interval
+        ))
         today = datetime.today()
+        today_utc = datetime.now(timezone.utc)
+        _start_date = today + timedelta(days=default_start_date)
+        _end_date = None
+        catchup = start_date
 
-        for delta in (-2, -1, 0, 1, 2):
+        def format(date):
+            if date is None:
+                return "-"
+            else:
+                return date.strftime("%Y/%m/%d %H:%M:%S")
+
+        deltas = (
+            (-2, "day_before_yesterday"),
+            (-1, "yesterday"),
+            (0, "today"),
+            (1, "tomorrow"),
+            (2, "day_after_tomorrow"),
+        )
+
+        for delta, description in deltas:
             date = today + timedelta(days=delta)
-            description = "today"
-            if delta == -2:
-                description = "day_before_yesterday"
-            elif delta == -1:
-                description = "yesterday"
-            elif delta == 1:
-                description = "tomorrow"
-            elif delta == 2:
-                description = "day_after_tomorrow"
 
             if start_date:
-                dag = DAG(f"dag_starts_{description}",
-                          start_date=date,
-                          schedule_interval=interval,
-                          catchup=False)
+                _start_date = datetime.today() + timedelta(days=delta)
             else:
-                dag = DAG(f"dag_starts_{description}",
-                          start_date=(today + timedelta(days=-10)),
-                          end_date=date,
-                          schedule_interval=interval,
-                          catchup=False)
+                _end_date = date
+
+            dag = DAG(f"dag_starts_{description}",
+                      start_date=_start_date,
+                      end_date=_end_date,
+                      schedule_interval=interval,
+                      catchup=catchup)
 
             scheduler = SchedulerJob()
             dag.clear()
             dr = scheduler.create_dag_run(dag)
-            execution_date = "-" if dr is None else dr.execution_date.strftime("%Y/%m/%d %H:%M:%S")
-            end_date = "-" if dag.end_date is None else dag.end_date.strftime("%Y/%m/%d %H:%M:%S")
-
-            date_description = (f'today={today.strftime("%Y/%m/%d %H:%M:%S")}, ',
-                                f'start_date={dag.start_date.strftime("%Y/%m/%d %H:%M:%S")}, ',
-                                f'end_date={end_date}, ',
-                                f'execution_date={execution_date}')
+            execution_date = None if dr is None else dr.execution_date
+            dates = (f"today={format(today)} (UTC={format(today_utc)}), ",
+                     f"start_date={format(dag.start_date)}, ",
+                     f"end_date={format(dag.end_date)}, ",
+                     f"execution_date={format(execution_date)}")
+            dates = "\n\t" + "\n\t".join(dates)
 
             if schedule_criteria(delta):
                 self.assertIsNotNone(dr)
-                print(f"{description} is scheduled ({date_description}).")
+                print(f"{description} is scheduled {dates}.")
             else:
                 self.assertIsNone(dr)
-                print(f"{description} is not scheduled ({date_description}).")
+                print(f"{description} is not scheduled {dates}.")
