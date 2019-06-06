@@ -108,3 +108,4 @@ _airflow
 data/
 credential.json
 cloud_sql_proxy
+.env
