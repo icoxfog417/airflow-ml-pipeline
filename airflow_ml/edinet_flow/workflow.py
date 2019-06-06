@@ -1,6 +1,7 @@
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
+import json
 from datetime import datetime
 from datetime import timedelta
 from airflow import DAG
@@ -8,8 +9,103 @@ from airflow.models import BaseOperator
 from airflow.sensors.base_sensor_operator import BaseSensorOperator
 from airflow.utils.decorators import apply_defaults
 from airflow.models import Variable
-import airflow_ml.edinet.api as api
+from airflow_ml.edinet_flow.storage import Storage
+from edinet.client.document_list_client import BaseDocumentListClient
+import edinet
 
+
+class EDINETMixin():
+    BUCKET = "edinet-data-store"
+
+    @property
+    def storage(self):
+        return Storage(self.BUCKET)
+
+    def list_name_at(self, date):
+        file_name = f"{date.strftime('%Y-%m-%d')}.json"
+        return file_name
+
+    def list_path_at(self, date):
+        return "lists/{}".format(self.list_name_at(date))
+
+    def document_path_of(self, file_name):
+        return "documents/{}".format(file_name)
+
+
+class GetEDINETDocumentListOperator(BaseOperator, EDINETMixin):
+    """ Save EDINET Document list response to GCS."""
+
+    def execute(self, context):
+        execution_date = context["execution_date"]
+        self.log.info("Get Document list of @ {}.".format(
+            execution_date.strftime("%Y/%m/%d")))
+
+        client = BaseDocumentListClient(response_type="2")
+        body = client._get(execution_date)
+        path = self.list_path_at(execution_date)
+        self.storage.upload_file(path, content=body)
+        return path
+
+
+class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
+    """ Save XBRL files from stored document list file."""
+
+    @apply_defaults
+    def __init__(self, document_type="xbrl", max_retrieve=-1,
+                 *args, **kwargs):
+        self.document_type = document_type
+        self.max_retrieve = max_retrieve
+        self._index = 0
+        self._targets = []
+        super().__init__(*args, **kwargs)
+
+    @property
+    def document_types(self):
+        return [
+            "120",  # 有価証券報告書
+            "130",  # 訂正有価証券報告書
+            "140",  # 四半期報告書
+            "150",  # 訂正四半期報告書
+            "160",  # 半期報告書
+            "170",  # 訂正半期報告書
+        ]
+
+    def poke(self, context):
+        execution_date = context["execution_date"]
+
+        if not self.storage.exists(self.list_name_at(execution_date)):
+            return False
+        elif len(self._targets) == 0:
+            document_list = self.storage.download_conent(
+                                self.list_name_at(execution_date))
+
+            document_list = json.loads(document_list)
+            documents = edinet.models.Documents.create(
+                            json.loads(document_list))
+
+            self._targets = [d for d in documents.list
+                             if d.document_type in self.document_types]
+
+        document = self._targets[self._index]
+
+        try:
+            content_path = document.get_xbrl()
+            file_name = os.path.basename(content_path)
+            path = self.document_path_of(file_name)
+            self.storage.upload_file(path, content_path=content_path)
+        except Exception as ex:
+            self.log.error(ex)
+
+        self._index += 1
+
+        if self.max_retrieve > 0 and self.max_retrieve == self._index:
+            return True
+        elif self._index == len(self._targets):
+            return True
+        else:
+            return False
+
+"""
 
 class EDINETGetDocumentsOperator(BaseOperator):
 
@@ -110,3 +206,4 @@ edinet_get_document = EDINETGetDocumentSensor(
                                 dag=dag)
 
 edinet_get_document_list >> edinet_get_document
+"""
