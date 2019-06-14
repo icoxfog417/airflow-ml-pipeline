@@ -25,11 +25,14 @@ class EDINETMixin():
         file_name = f"{date.strftime('%Y-%m-%d')}.json"
         return file_name
 
-    def list_path_at(self, date):
+    def list_path_of(self, date):
         return "lists/{}".format(self.list_name_at(date))
 
-    def document_path_of(self, file_name):
-        return "documents/{}".format(file_name)
+    def document_path_of(self, date, file_name=""):
+        if file_name:
+            return f"documents/{date.strftime('%Y-%m-%d')}/{file_name}"
+        else:
+            return f"documents/{date.strftime('%Y-%m-%d')}"
 
 
 class GetEDINETDocumentListOperator(BaseOperator, EDINETMixin):
@@ -42,68 +45,80 @@ class GetEDINETDocumentListOperator(BaseOperator, EDINETMixin):
 
         client = BaseDocumentListClient(response_type="2")
         body = client._get(execution_date)
-        path = self.list_path_at(execution_date)
+        path = self.list_path_of(execution_date)
         self.storage.upload_file(path, content=body)
         return path
 
 
 class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
-    """ Save XBRL files from stored document list file."""
+    """ Save files from stored document list file."""
 
     @apply_defaults
-    def __init__(self, document_type="xbrl", max_retrieve=-1,
-                 *args, **kwargs):
-        self.document_type = document_type
+    def __init__(self, max_retrieve=-1, document_types=(),
+                 file_types=("xbrl", "pdf"), *args, **kwargs):
         self.max_retrieve = max_retrieve
+        self.document_types = document_types
+        self.file_types = file_types
         self._index = 0
         self._targets = []
         super().__init__(*args, **kwargs)
 
-    @property
-    def document_types(self):
-        return [
-            "120",  # 有価証券報告書
-            "130",  # 訂正有価証券報告書
-            "140",  # 四半期報告書
-            "150",  # 訂正四半期報告書
-            "160",  # 半期報告書
-            "170",  # 訂正半期報告書
-        ]
-
     def poke(self, context):
         execution_date = context["execution_date"]
 
-        if not self.storage.exists(self.list_name_at(execution_date)):
-            return False
+        if not self.storage.exists(self.list_path_of(execution_date)):
+            self.log.info("Document @ {} does not found.".format(
+                           execution_date.strftime("%Y/%m/%d")))
+            return True
         elif len(self._targets) == 0:
             document_list = self.storage.download_conent(
-                                self.list_name_at(execution_date))
-
+                                self.list_path_of(execution_date))
             document_list = json.loads(document_list)
-            documents = edinet.models.Documents.create(
-                            json.loads(document_list))
+            documents = edinet.models.Documents.create(document_list)
 
-            self._targets = [d for d in documents.list
-                             if d.document_type in self.document_types]
+            if len(self.document_types) == 0:
+                self._targets = documents.list
+            else:
+                self._targets = [d for d in documents.list
+                                 if d.doc_type_code in self.document_types]
+
+        if len(self._targets) == 0:
+            self.log.info("No target document exist @ {}.".format(
+                           execution_date.strftime("%Y/%m/%d")))
+
+            return True
 
         document = self._targets[self._index]
 
-        try:
-            content_path = document.get_xbrl()
-            file_name = os.path.basename(content_path)
-            path = self.document_path_of(file_name)
-            self.storage.upload_file(path, content_path=content_path)
-        except Exception as ex:
-            self.log.error(ex)
+        for file_type in self.file_types:
+            content_path = ""
+            try:
+                if file_type == "xbrl" and document.has_xbrl:
+                    content_path = document.get_xbrl()
+                elif file_type == "pdf" and document.has_pdf:
+                    content_path = document.get_pdf()
+
+                if content_path:
+                    file_name = os.path.basename(content_path)
+                    file_name = str(file_name).split("__")[-1]
+                    path = self.document_path_of(execution_date, file_name)
+                    self.storage.upload_file(path, content_path=content_path)
+
+            except Exception as ex:
+                self.log.error(ex)
 
         self._index += 1
 
-        if self.max_retrieve > 0 and self.max_retrieve == self._index:
-            return True
-        elif self._index == len(self._targets):
-            return True
-        else:
+        if self.max_retrieve > 0:
+            if self._index < self.max_retrieve:
+                return False
+            else:
+                return True
+        elif self._index < len(self._targets):
             return False
+        else:
+            return True
+
 
 """
 
