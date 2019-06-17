@@ -15,11 +15,11 @@ import edinet
 
 
 class EDINETMixin():
-    BUCKET = "edinet-data-store"
+    BUCKET = "chakki.edi-test.jp"
 
     @property
     def storage(self):
-        return Storage(self.BUCKET)
+        return Storage.s3(self.BUCKET)
 
     def list_name_at(self, date):
         file_name = f"{date.strftime('%Y-%m-%d')}.json"
@@ -65,7 +65,6 @@ class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
 
     def poke(self, context):
         execution_date = context["execution_date"]
-
         if not self.storage.exists(self.list_path_of(execution_date)):
             self.log.info("Document @ {} does not found.".format(
                            execution_date.strftime("%Y/%m/%d")))

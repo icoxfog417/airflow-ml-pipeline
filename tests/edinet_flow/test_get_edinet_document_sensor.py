@@ -8,7 +8,6 @@ from airflow import DAG, configuration
 from airflow.models import TaskInstance
 from airflow.utils import timezone
 from airflow_ml.edinet_flow.workflow import GetEDINETDocumentSensor
-from airflow_ml.edinet_flow.storage import Storage
 
 
 DEFAULT_DATE = timezone.datetime(2019, 6, 4)
@@ -61,13 +60,13 @@ class TestGetEDINETDocumentListOperator(unittest.TestCase):
         task.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE,
                  ignore_ti_state=True)
 
-        iterator = task.storage.list_blobs(task.document_path_of(DEFAULT_DATE))
+        iterator = task.storage.list_objects(task.document_path_of(DEFAULT_DATE))
         count = 0
         for i, b in enumerate(iterator):
-            self.assertTrue("S100FTFN" in b.name or "S100FVMU" in b.name)
+            self.assertTrue("S100FTFN" in b or "S100FVMU" in b)
             count += 1
-            b.delete()
+            task.storage.delete(b)
 
         self.assertEqual(count, num_file * 2)  # xbrl and pdf
         test_file_path = task.list_path_of(DEFAULT_DATE)
-        task.storage.get_blob(test_file_path).delete()
+        task.storage.delete(test_file_path)

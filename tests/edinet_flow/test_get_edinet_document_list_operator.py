@@ -5,7 +5,6 @@ from airflow import DAG, configuration
 from airflow.models import TaskInstance
 from airflow.utils import timezone
 from airflow_ml.edinet_flow.workflow import GetEDINETDocumentListOperator
-from airflow_ml.edinet_flow.storage import Storage
 
 
 DEFAULT_DATE = timezone.datetime(2017, 6, 1)
@@ -28,9 +27,8 @@ class TestGetEDINETDocumentListOperator(unittest.TestCase):
                 task_id="get_edinet_dl", dag=self.dag)
         ti = TaskInstance(task=task, execution_date=DEFAULT_DATE)
         path = task.execute(ti.get_template_context())
-        storage = Storage("edinet-data-store")
-        self.assertTrue(storage.exists(path))
+        self.assertTrue(task.storage.exists(path))
         file_name = os.path.basename(path)
         self.assertEqual(file_name, "{}.json".format(
                          DEFAULT_DATE.strftime("%Y-%m-%d")))
-        storage.delete(path)
+        task.storage.delete(path)

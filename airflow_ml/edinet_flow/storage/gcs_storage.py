@@ -1,9 +1,10 @@
 import json
 from tempfile import NamedTemporaryFile
 from google.cloud import storage
+from airflow_ml.edinet_flow.storage.storage import Storage
 
 
-class Storage():
+class GCSStorage(Storage):
 
     def __init__(self, root, credential_path=None):
         self.root = root
@@ -45,10 +46,11 @@ class Storage():
             raise Exception("{} does not exist at {}.".format(path, self.root))
         return blob
 
-    def list_blobs(self, prefix=None, delimiter=None):
+    def list_objects(self, prefix="", delimiter=""):
         bucket = self._get_client().get_bucket(self.root)
         blobs = bucket.list_blobs(prefix=prefix, delimiter=delimiter)
-        return blobs
+        for b in blobs:
+            yield b.name
 
     def _get_client(self):
         if self.credential_path is not None:
