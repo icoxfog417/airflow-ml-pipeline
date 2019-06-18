@@ -1,0 +1,1 @@
+from .edinet_document_register import EDINETDocumentRegister

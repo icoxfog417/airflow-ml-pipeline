@@ -119,6 +119,73 @@ class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
             return True
 
 
+class RegisterDocumentOperator(BaseOperator, EDINETMixin):
+    """ Register documents from stored list and documents."""
+
+    @apply_defaults
+    def __init__(self, max_retrieve=-1, document_types=(),
+                 *args, **kwargs):
+        self.max_retrieve = max_retrieve
+        self.document_types = document_types
+        self._targets = []
+        super().__init__(*args, **kwargs)
+
+    def execute(self, context):
+        execution_date = context["execution_date"]
+        if not self.storage.exists(self.list_path_of(execution_date)):
+            self.log.info("Document @ {} does not found.".format(
+                           execution_date.strftime("%Y/%m/%d")))
+            return False
+
+        document_list = self.storage.download_conent(
+                                self.list_path_of(execution_date))
+        document_list = json.loads(document_list)
+        documents = edinet.models.Documents.create(document_list)
+
+        if len(self.document_types) == 0:
+            self._targets = documents.list
+        else:
+            self._targets = [d for d in documents.list
+                             if d.doc_type_code in self.document_types]
+
+        files = self.storage.list_objects(
+                    self.document_path_of(execution_date))
+        file_paths = {}
+        for p in files:
+            file_name = os.path.basename(p)
+            name, ext = os.path.splitext(file_name)
+            key = name.split("_")[0]
+
+            if key not in file_paths:
+                file_paths[key] = {}
+
+            if ext == ".xbrl":
+                file_paths[key] = {"xbrl": key}
+            elif ext == ".pdf":
+                file_paths[key] = {"pdf": key}
+
+        records = []
+        for d in self._targets:
+
+
+
+
+
+
+class RetrieveFeaturesOperator(BaseOperator, EDINETMixin):
+    """ Retrieve features from documents """
+
+    @apply_defaults
+    def __init__(self, feature_name, year_month="",
+                 max_retrieve=-1, *args, **kwargs):
+        self.feature_name = feature_name
+        self.max_retrieve = max_retrieve
+        super().__init__(*args, **kwargs)
+
+    def execute(self, context):
+        pass
+
+
 """
 
 class EDINETGetDocumentsOperator(BaseOperator):

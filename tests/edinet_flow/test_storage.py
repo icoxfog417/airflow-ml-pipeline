@@ -6,7 +6,7 @@ from airflow_ml.edinet_flow.storage import Storage
 
 class TestStorage(unittest.TestCase):
 
-    def xtest_upload_gcs(self):
+    def test_upload_gcs(self):
         item = {
             "value": 1,
             "key": "hogehoge"
