@@ -3,7 +3,6 @@ import json
 from django.test import TestCase
 from airflow import DAG, configuration
 from airflow.utils import timezone
-from airflow import DAG, configuration
 from airflow_ml.edinet_flow.workflow import EDINETMixin
 from airflow_ml.edinet_flow.workflow import GetEDINETDocumentListOperator
 from airflow_ml.edinet_flow.workflow import GetEDINETDocumentSensor
@@ -19,15 +18,18 @@ class TestRegisterDocumentOperator(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         configuration.load_test_config()
-        cls.prepare_dag = DAG(
-            "register_document_prepare_dag",
-            default_args={
-                "owner": "airflow_ml",
-                'start_date': DEFAULT_DATE})
+        dag_id = "register_document_prepare_dag"
+        cls.prepare_dag = DAG(dag_id=dag_id, start_date=DEFAULT_DATE)
 
         get_list = GetEDINETDocumentListOperator(
                 task_id="get_document_list", dag=cls.prepare_dag)
-        cls.prepare_dag.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        get_document = GetEDINETDocumentSensor(
+                max_retrieve=3, document_types=("120"),
+                task_id="get_document", dag=cls.prepare_dag, poke_interval=2)
+
+        get_list >> get_document
+        get_document.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE,
+                         ignore_ti_state=True)
 
     @classmethod
     def tearDownClass(cls):
