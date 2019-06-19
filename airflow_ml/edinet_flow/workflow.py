@@ -1,6 +1,8 @@
 import os
 import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), "./app/"))
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "api.settings")
 import json
 from datetime import datetime
 from datetime import timedelta
@@ -10,8 +12,12 @@ from airflow.sensors.base_sensor_operator import BaseSensorOperator
 from airflow.utils.decorators import apply_defaults
 from airflow.models import Variable
 from airflow_ml.edinet_flow.storage import Storage
-from edinet.client.document_list_client import BaseDocumentListClient
 import edinet
+from edinet.client.document_list_client import BaseDocumentListClient
+
+import django
+django.setup()
+from eagle.service import EDINETDocumentRegister
 
 
 class EDINETMixin():
@@ -25,14 +31,38 @@ class EDINETMixin():
         file_name = f"{date.strftime('%Y-%m-%d')}.json"
         return file_name
 
-    def list_path_of(self, date):
+    def list_path_at(self, date):
         return "lists/{}".format(self.list_name_at(date))
 
-    def document_path_of(self, date, file_name=""):
+    def get_documents_at(self, date):
+        path = self.list_path_at(date)
+        document_list = self.storage.download_conent(path)
+        document_list = json.loads(document_list)
+        documents = edinet.models.Documents.create(document_list)
+        return documents
+
+    def document_path_at(self, date, file_name=""):
         if file_name:
             return f"documents/{date.strftime('%Y-%m-%d')}/{file_name}"
         else:
             return f"documents/{date.strftime('%Y-%m-%d')}"
+
+    def get_file_path(self, document):
+        prefix = self.document_path_at(document.submitted_date)
+        files = self.storage.list_objects(prefix)
+        result = {
+            "xbrl": "",
+            "pdf": ""
+        }
+        for f in files:
+            name = os.path.basename(f)
+            if name.startswith(document.document_id):
+                if name.endswith(".xbrl"):
+                    result["xbrl"] = f
+                elif name.endswith(".pdf"):
+                    result["pdf"] = f
+
+        return result
 
 
 class GetEDINETDocumentListOperator(BaseOperator, EDINETMixin):
@@ -45,7 +75,7 @@ class GetEDINETDocumentListOperator(BaseOperator, EDINETMixin):
 
         client = BaseDocumentListClient(response_type="2")
         body = client._get(execution_date)
-        path = self.list_path_of(execution_date)
+        path = self.list_path_at(execution_date)
         self.storage.upload_file(path, content=body)
         return path
 
@@ -65,15 +95,12 @@ class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
 
     def poke(self, context):
         execution_date = context["execution_date"]
-        if not self.storage.exists(self.list_path_of(execution_date)):
+        if not self.storage.exists(self.list_path_at(execution_date)):
             self.log.info("Document @ {} does not found.".format(
                            execution_date.strftime("%Y/%m/%d")))
             return True
         elif len(self._targets) == 0:
-            document_list = self.storage.download_conent(
-                                self.list_path_of(execution_date))
-            document_list = json.loads(document_list)
-            documents = edinet.models.Documents.create(document_list)
+            documents = self.get_documents_at(execution_date)
 
             if len(self.document_types) == 0:
                 self._targets = documents.list
@@ -100,7 +127,7 @@ class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
                 if content_path:
                     file_name = os.path.basename(content_path)
                     file_name = str(file_name).split("__")[-1]
-                    path = self.document_path_of(execution_date, file_name)
+                    path = self.document_path_at(execution_date, file_name)
                     self.storage.upload_file(path, content_path=content_path)
 
             except Exception as ex:
@@ -132,15 +159,12 @@ class RegisterDocumentOperator(BaseOperator, EDINETMixin):
 
     def execute(self, context):
         execution_date = context["execution_date"]
-        if not self.storage.exists(self.list_path_of(execution_date)):
+        if not self.storage.exists(self.list_path_at(execution_date)):
             self.log.info("Document @ {} does not found.".format(
                            execution_date.strftime("%Y/%m/%d")))
             return False
 
-        document_list = self.storage.download_conent(
-                                self.list_path_of(execution_date))
-        document_list = json.loads(document_list)
-        documents = edinet.models.Documents.create(document_list)
+        documents = self.get_documents_at(execution_date)
 
         if len(self.document_types) == 0:
             self._targets = documents.list
@@ -148,28 +172,19 @@ class RegisterDocumentOperator(BaseOperator, EDINETMixin):
             self._targets = [d for d in documents.list
                              if d.doc_type_code in self.document_types]
 
-        files = self.storage.list_objects(
-                    self.document_path_of(execution_date))
-        file_paths = {}
-        for p in files:
-            file_name = os.path.basename(p)
-            name, ext = os.path.splitext(file_name)
-            key = name.split("_")[0]
+        if self.max_retrieve > 0:
+            self._targets = self._targets[:self.max_retrieve]
 
-            if key not in file_paths:
-                file_paths[key] = {}
+        service = EDINETDocumentRegister()
 
-            if ext == ".xbrl":
-                file_paths[key] = {"xbrl": key}
-            elif ext == ".pdf":
-                file_paths[key] = {"pdf": key}
+        registered = 0
+        for d in documents:
+            path = self.get_file_path(d)
+            service.register_document(d, path["xbrl"], path["pdf"])
+            registered += 1
 
-        records = []
-        for d in self._targets:
-
-
-
-
+        self.log.info("Document @ {} does not found.".format(
+                           execution_date.strftime("%Y/%m/%d")))
 
 
 class RetrieveFeaturesOperator(BaseOperator, EDINETMixin):

@@ -1,5 +1,5 @@
 from django.db import models
-from .masters import Company, Document
+from eagle.models.masters import Company, Document
 
 
 class Feature(models.Model):

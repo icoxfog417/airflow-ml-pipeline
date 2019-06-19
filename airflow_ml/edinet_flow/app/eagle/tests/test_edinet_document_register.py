@@ -15,7 +15,7 @@ class TestEDINETDocumentRegister(TestCase):
         for d in documents.list:
             _d = service.register_document(d, "xbrl_path", "pdf_path")
             self.assertTrue(_d)
-        
+
         company = EDINETCompany.objects.get(jcn="7010001054021")
         self.assertEqual("野村アセットマネジメント株式会社", company.local_name)
 

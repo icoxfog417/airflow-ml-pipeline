@@ -2,18 +2,16 @@ import os
 import io
 import logging
 import unittest
-from datetime import datetime
 import pytest
 from airflow import DAG, configuration
-from airflow.models import TaskInstance
 from airflow.utils import timezone
-from airflow_ml.edinet_flow.workflow import GetEDINETDocumentSensor
+from airflow_ml.edinet_flow.workflow import GetEDINETDocumentSensor, EDINETMixin
 
 
 DEFAULT_DATE = timezone.datetime(2019, 6, 4)
 
 
-class TestGetEDINETDocumentListOperator(unittest.TestCase):
+class TestGetEDINETDocumentSensor(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
@@ -24,6 +22,18 @@ class TestGetEDINETDocumentListOperator(unittest.TestCase):
                 "owner": "airflow_ml",
                 'start_date': DEFAULT_DATE})
         self.addCleanup(self.dag.clear)
+
+    @classmethod
+    def tearDownClass(cls):
+        edinet = EDINETMixin()
+        path = edinet.list_path_at(DEFAULT_DATE)
+        if edinet.storage.exists(path):
+            edinet.storage.delete(path)
+
+        path = edinet.document_path_at(DEFAULT_DATE)
+        iterator = edinet.storage.list_objects(path)
+        for p in iterator:
+            edinet.storage.delete(p)
 
     @pytest.fixture(autouse=True)
     def inject_logger(self, caplog):
@@ -54,13 +64,19 @@ class TestGetEDINETDocumentListOperator(unittest.TestCase):
                 task_id="get_edinet_d", dag=self.dag, poke_interval=2)
 
         test_file = os.path.join(os.path.dirname(__file__), test_file_name)
-        task.storage.upload_file(task.list_path_of(DEFAULT_DATE),
+        task.storage.upload_file(task.list_path_at(DEFAULT_DATE),
                                  content_path=test_file)
 
         task.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE,
                  ignore_ti_state=True)
 
-        iterator = task.storage.list_objects(task.document_path_of(DEFAULT_DATE))
+        documents = task.get_documents_at(DEFAULT_DATE)
+        target = [d for d in documents.list if d.document_id == "S100FTFN"][0]
+        result = task.get_file_path(target)
+        self.assertEqual(result["xbrl"], "documents/2019-06-04/S100FTFN_1.xbrl")
+        self.assertEqual(result["pdf"], "documents/2019-06-04/S100FTFN_2.pdf")
+
+        iterator = task.storage.list_objects(task.document_path_at(DEFAULT_DATE))
         count = 0
         for i, b in enumerate(iterator):
             self.assertTrue("S100FTFN" in b or "S100FVMU" in b)
@@ -68,5 +84,5 @@ class TestGetEDINETDocumentListOperator(unittest.TestCase):
             task.storage.delete(b)
 
         self.assertEqual(count, num_file * 2)  # xbrl and pdf
-        test_file_path = task.list_path_of(DEFAULT_DATE)
+        test_file_path = task.list_path_at(DEFAULT_DATE)
         task.storage.delete(test_file_path)
