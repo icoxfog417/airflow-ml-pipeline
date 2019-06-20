@@ -125,8 +125,11 @@ class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
                     content_path = document.get_pdf()
 
                 if content_path:
-                    file_name = os.path.basename(content_path)
-                    file_name = str(file_name).split("__")[-1]
+                    name, ext = os.path.splitext(os.path.basename(content_path))
+                    name = name.split("__")[0]
+                    name = name.split("_")[0]
+                    file_name = name + ext
+                    print(file_name)
                     path = self.document_path_at(execution_date, file_name)
                     self.storage.upload_file(path, content_path=content_path)
 
@@ -178,13 +181,13 @@ class RegisterDocumentOperator(BaseOperator, EDINETMixin):
         service = EDINETDocumentRegister()
 
         registered = 0
-        for d in documents:
+        print(len(self._targets))
+        for d in self._targets:
             path = self.get_file_path(d)
             service.register_document(d, path["xbrl"], path["pdf"])
             registered += 1
 
-        self.log.info("Document @ {} does not found.".format(
-                           execution_date.strftime("%Y/%m/%d")))
+        self.log.info("{} documents are registered.".format(registered))
 
 
 class RetrieveFeaturesOperator(BaseOperator, EDINETMixin):

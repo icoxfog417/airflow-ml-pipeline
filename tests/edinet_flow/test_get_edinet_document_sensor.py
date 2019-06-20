@@ -60,7 +60,7 @@ class TestGetEDINETDocumentSensor(unittest.TestCase):
         test_file_name = f"data/{DEFAULT_DATE.strftime('%Y-%m-%d')}.json"
         num_file = 2
         task = GetEDINETDocumentSensor(
-                max_retrieve=num_file, document_types=("120"),
+                max_retrieve=num_file, document_types=("120",),
                 task_id="get_edinet_d", dag=self.dag, poke_interval=2)
 
         test_file = os.path.join(os.path.dirname(__file__), test_file_name)
@@ -73,8 +73,8 @@ class TestGetEDINETDocumentSensor(unittest.TestCase):
         documents = task.get_documents_at(DEFAULT_DATE)
         target = [d for d in documents.list if d.document_id == "S100FTFN"][0]
         result = task.get_file_path(target)
-        self.assertEqual(result["xbrl"], "documents/2019-06-04/S100FTFN_1.xbrl")
-        self.assertEqual(result["pdf"], "documents/2019-06-04/S100FTFN_2.pdf")
+        self.assertEqual(result["xbrl"], "documents/2019-06-04/S100FTFN.xbrl")
+        self.assertEqual(result["pdf"], "documents/2019-06-04/S100FTFN.pdf")
 
         iterator = task.storage.list_objects(task.document_path_at(DEFAULT_DATE))
         count = 0

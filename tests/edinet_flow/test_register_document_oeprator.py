@@ -1,5 +1,6 @@
 import os
 import json
+from datetime import timedelta
 from django.test import TestCase
 from airflow import DAG, configuration
 from airflow.utils import timezone
@@ -7,9 +8,11 @@ from airflow_ml.edinet_flow.workflow import EDINETMixin
 from airflow_ml.edinet_flow.workflow import GetEDINETDocumentListOperator
 from airflow_ml.edinet_flow.workflow import GetEDINETDocumentSensor
 from airflow_ml.edinet_flow.workflow import RegisterDocumentOperator
+from eagle.models.masters import EDINETDocument
 
 
 DEFAULT_DATE = timezone.datetime(2019, 6, 7)
+# https://disclosure.edinet-fsa.go.jp/api/v1/documents.json?type=2&date=2019-06-07
 
 
 class TestRegisterDocumentOperator(TestCase):
@@ -24,12 +27,11 @@ class TestRegisterDocumentOperator(TestCase):
         get_list = GetEDINETDocumentListOperator(
                 task_id="get_document_list", dag=cls.prepare_dag)
         get_document = GetEDINETDocumentSensor(
-                max_retrieve=3, document_types=("120"),
+                max_retrieve=3, document_types=("120",),
                 task_id="get_document", dag=cls.prepare_dag, poke_interval=2)
-
-        get_list >> get_document
-        get_document.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE,
-                         ignore_ti_state=True)
+        cls.prepare_dag.clear()
+        get_list.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
+        get_document.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
 
     @classmethod
     def tearDownClass(cls):
@@ -55,4 +57,26 @@ class TestRegisterDocumentOperator(TestCase):
         self.addCleanup(self.dag.clear)
 
     def test_register_document(self):
-        pass
+        task = RegisterDocumentOperator(
+                max_retrieve=3, document_types=("120",),
+                task_id="register_document", dag=self.dag)
+
+        task.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE,
+                 ignore_ti_state=True)
+
+        documents = task.storage.list_objects(
+                        task.document_path_at(DEFAULT_DATE))
+        documents = sorted(documents)
+        documents = [d for d in documents if d.endswith(".pdf")]
+        range = [DEFAULT_DATE, DEFAULT_DATE + timedelta(days=1)]
+        documents_in_db = EDINETDocument.objects\
+                            .filter(submitted_date__range=range)\
+                            .order_by("edinet_document_id")
+
+        self.assertEqual(len(documents), len(documents_in_db))
+        print(documents)
+        print(">>>>>>>>>>>>>>>>>>>>>")
+        print(documents_in_db)
+        for d, dd in zip(documents, documents_in_db):
+            name, _ = os.path.splitext(os.path.basename(d))
+            self.assertEqual(name, dd.edinet_document_id)
