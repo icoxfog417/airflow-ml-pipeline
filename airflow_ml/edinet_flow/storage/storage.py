@@ -31,3 +31,6 @@ class Storage():
     def s3(cls, root, credential_path=None):
         from airflow_ml.edinet_flow.storage.s3_storage import S3Storage
         return S3Storage(root, credential_path)
+
+    @classmethod
+    def local(cls, root):

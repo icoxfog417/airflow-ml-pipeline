@@ -7,7 +7,7 @@ class Feature(models.Model):
     year_month = models.DateField()
     unit = models.CharField(max_length=3)
     document = models.ForeignKey(Document, on_delete=models.PROTECT)
-    base = models.TextField()
+    ground = models.TextField()
 
     class Meta:
         abstract = True

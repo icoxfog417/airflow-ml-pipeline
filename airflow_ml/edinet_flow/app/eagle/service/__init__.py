@@ -1,1 +1,2 @@
 from .edinet_document_register import EDINETDocumentRegister
+from .edinet_feature_updater import EDINETFeatureUpdater

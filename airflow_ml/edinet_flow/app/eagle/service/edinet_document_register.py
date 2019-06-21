@@ -44,11 +44,11 @@ class EDINETDocumentRegister():
         _document.period_start = document.period_start
         _document.period_end = document.period_end
         _document.submitted_date = document.submitted_date
-        _document.document_type = document.doc_type_code
         _document.lang = "ja"
         _document.xbrl_path = xbrl_path
         _document.pdf_path = pdf_path
         _document.edinet_document_id = document.document_id
+        _document.edinet_document_type = document.doc_type_code
         _document.title = document.title
         _document.ordinance_code = document.ordinance_code
         _document.form_code = document.form_code

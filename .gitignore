@@ -108,3 +108,4 @@ _airflow
 credential.json
 cloud_sql_proxy
 .env
+airflow_ml/edinet_flow/app/eagle/tests/data

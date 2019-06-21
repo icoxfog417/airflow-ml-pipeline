@@ -74,9 +74,6 @@ class TestRegisterDocumentOperator(TestCase):
                             .order_by("edinet_document_id")
 
         self.assertEqual(len(documents), len(documents_in_db))
-        print(documents)
-        print(">>>>>>>>>>>>>>>>>>>>>")
-        print(documents_in_db)
         for d, dd in zip(documents, documents_in_db):
             name, _ = os.path.splitext(os.path.basename(d))
             self.assertEqual(name, dd.edinet_document_id)

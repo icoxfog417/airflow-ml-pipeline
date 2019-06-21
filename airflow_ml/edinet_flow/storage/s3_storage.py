@@ -8,8 +8,7 @@ from airflow_ml.edinet_flow.storage.storage import Storage
 class S3Storage(Storage):
 
     def __init__(self, root, credential_path=None):
-        self.root = root
-        self.credential_path = credential_path
+        super().__init__(root, credential_path)
 
     def upload_file(self, path, content_path="", content=None):
         _content_path = content_path

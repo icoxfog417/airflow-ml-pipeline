@@ -18,7 +18,6 @@ class Document(models.Model):
     period_start = models.DateField(null=True)
     period_end = models.DateField(null=True)
     submitted_date = models.DateTimeField()
-    document_type = models.CharField(max_length=3)
     lang = models.CharField(max_length=2)
     xbrl_path = models.TextField()
     pdf_path = models.TextField()
@@ -26,6 +25,7 @@ class Document(models.Model):
 
 class EDINETDocument(Document):
     edinet_document_id = models.CharField(max_length=8)
+    edinet_document_type = models.CharField(max_length=3)
     title = models.TextField()
     ordinance_code = models.CharField(max_length=3)
     form_code = models.CharField(max_length=6)
