@@ -190,18 +190,40 @@ class RegisterDocumentOperator(BaseOperator, EDINETMixin):
         self.log.info("{} documents are registered.".format(registered))
 
 
-class RetrieveFeaturesOperator(BaseOperator, EDINETMixin):
-    """ Retrieve features from documents """
+class UpdateFeaturesOperator(BaseOperator, EDINETMixin):
+    """ Update features from documents """
 
     @apply_defaults
-    def __init__(self, feature_name, year_month="",
+    def __init__(self, features=None,
                  max_retrieve=-1, *args, **kwargs):
-        self.feature_name = feature_name
+        self.features = features
+
+        if self.features is None:
+            self.features = {
+                "annual": [
+                    "executive_state.number_of_executives"
+                ]
+            }
+
         self.max_retrieve = max_retrieve
         super().__init__(*args, **kwargs)
 
     def execute(self, context):
-        pass
+        execution_date = context["execution_date"]
+        if not self.storage.exists(self.list_path_at(execution_date)):
+            self.log.info("Document @ {} does not found.".format(
+                           execution_date.strftime("%Y/%m/%d")))
+            return False
+
+        documents = self.get_documents_at(execution_date)
+        if self.max_retrieve > 0:
+            documents = documents[:self.max_retrieve]
+        
+        for d in documents:
+            
+
+
+
 
 
 """

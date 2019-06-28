@@ -58,9 +58,9 @@ class TestEDINETFeatureUpdater(TransactionTestCase):
                 shutil.copyfile(source, target)
 
         service = EDINETFeatureUpdater(StorageMock())
-        results = service.update_from_annual_report(date,
-                                                    "executive_state.number_of_executives",
-                                                    dryrun=True)
+        results = service.update_from_annual_report(
+                    "executive_state.number_of_executives",
+                    date=date, dryrun=True)
 
         self.assertEqual(len(results), len(targets))
 

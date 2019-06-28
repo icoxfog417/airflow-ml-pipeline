@@ -1,12 +1,10 @@
 from django.db import models
-from eagle.models.masters import Company, Document
+from eagle.models.masters import Document
 
 
 class Feature(models.Model):
-    company = models.ForeignKey(Company, on_delete=models.PROTECT)
-    year_month = models.DateField()
-    unit = models.CharField(max_length=3)
     document = models.ForeignKey(Document, on_delete=models.PROTECT)
+    unit = models.CharField(max_length=3)
     ground = models.TextField()
 
     class Meta:
