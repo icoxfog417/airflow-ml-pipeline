@@ -18,11 +18,11 @@ class EDINETFeatureExtractor():
         if isinstance(feature_or_features, str):
             features = [feature_or_features]
 
-        class_models = []
+        feature_objects = {}
         with tempfile.NamedTemporaryFile(delete=True) as f:
             self.storage.download_file(document.path, f.name)
-            for f in features:
-                aspect, _feature = f.split(".")
+            for _f in features:
+                aspect, _feature = _f.split(".")
                 value = edinet.parse(f.name, aspect, _feature)
                 _class = self.get_feature_object(_feature)
 
@@ -32,15 +32,15 @@ class EDINETFeatureExtractor():
                     value=value.value,
                     ground=value.ground
                 )
-                class_models.append((_class, model))
+                feature_objects[_f] = model
 
         if not dryrun:
             with transaction.atomic():
-                for c, m in class_models:
-                    c.objects.save(m)
+                for k in feature_objects:
+                    object = feature_objects[k]
+                    object.save()
 
-        models = [m for c, m in class_models]
-        return models
+        return feature_objects
 
     def get_feature_object(self, feature_name):
         _class = None

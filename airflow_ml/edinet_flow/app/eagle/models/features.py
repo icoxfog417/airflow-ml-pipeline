@@ -7,9 +7,6 @@ class Feature(models.Model):
     unit = models.CharField(max_length=3)
     ground = models.TextField()
 
-    class Meta:
-        abstract = True
-
 
 class NumberOfExecutives(Feature):
     value = models.IntegerField()

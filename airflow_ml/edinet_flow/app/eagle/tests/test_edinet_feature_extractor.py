@@ -1,15 +1,14 @@
 import os
-import calendar
 import shutil
 import json
-from datetime import datetime
 from django.test import TransactionTestCase
 import edinet
 from eagle.service import EDINETDocumentRegister
-from eagle.service import EDINETFeatureUpdater
+from eagle.service import EDINETFeatureExtractor
+from eagle.models import NumberOfExecutives
 
 
-class TestEDINETFeatureUpdater(TransactionTestCase):
+class TestEDINETFeatureExtractor(TransactionTestCase):
     DATA_DIR = os.path.join(os.path.dirname(__file__), "./data")
 
     def setUpData(self, document_types, count=-1):
@@ -25,6 +24,7 @@ class TestEDINETFeatureUpdater(TransactionTestCase):
             targets = targets[:count]
         service = EDINETDocumentRegister()
 
+        registered = []
         for t in targets:
             xbrl = t.document_id + "_1.xbrl"
             pdf = t.document_id + "_2.pdf"
@@ -43,37 +43,32 @@ class TestEDINETFeatureUpdater(TransactionTestCase):
                 else:
                     pdf_path = ""
 
-            service.register_document(t, xbrl_path, pdf_path)
+            r = service.register_document(t, xbrl_path, pdf_path)
+            registered.append(r)
 
-        return targets
+        return targets, registered
 
-    def test_update_annual_feature(self):
-        targets = self.setUpData(("120",))
-        date = datetime(2018, 3, 1)
+    def test_extract_feature(self):
+        targets, registered = self.setUpData(("120",))
         assert len(targets) > 0
+        self.assertEqual(len(targets), len(registered))
 
         class StorageMock():
 
             def download_file(self, source, target):
                 shutil.copyfile(source, target)
 
-        service = EDINETFeatureUpdater(StorageMock())
-        results = service.update_from_annual_report(
-                    "executive_state.number_of_executives",
-                    date=date, dryrun=True)
+        service = EDINETFeatureExtractor(StorageMock())
 
-        self.assertEqual(len(results), len(targets))
+        feature_name = "executive_state.number_of_executives"
+        for d in registered:
+            results = service.extract_feature(
+                d, feature_name, dryrun=True)
 
-        for r, t in zip(results, targets):
-            month_count = 1
-            ym = datetime(date.year, date.month, date.day)
-            while ym.year != t.period_end.year or ym.month != t.period_end.month:
-                month_count += 1
-                y, m = calendar.nextmonth(ym.year, ym.month)
-                ym = datetime(y, m, 1)
-
-            self.assertEqual(month_count, len(r))
-            self.assertGreater(r[0].value, 0)
+            self.assertTrue(feature_name in results)
+            self.assertTrue(
+                isinstance(results[feature_name], NumberOfExecutives))
+            self.assertGreater(results[feature_name].value, 0)
 
 
 LISTS = """
