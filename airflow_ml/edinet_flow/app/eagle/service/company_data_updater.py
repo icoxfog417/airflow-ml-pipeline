@@ -10,17 +10,19 @@ class CompanyDataUpdater():
 
     def update_company_data(self,
                             company, date,
-                            feature_or_features,
+                            features=(),
                             dryrun=False):
 
-        features = []
-        if isinstance(feature_or_features, str):
-            features = [feature_or_features]
+        _features = CompanyData._meta.get_fields()
+        _features = [f.name for f in _features
+                     if f.name not in ("company", "year_month", "id")]
+
+        if len(features) > 0:
+            _features = [f for f in _features if f in features]
 
         updates = {}
-        for f in features:
-            aspect, _feature = f.split(".")
-            _class = self.get_feature_object(_feature)
+        for f in _features:
+            _class = self.get_feature_object(f)
 
             related_documents = _class.objects.filter(
                 document__company=company,
@@ -42,7 +44,7 @@ class CompanyDataUpdater():
                             company=d.company,
                             year_month=ym,
                         )
-                        setattr(object, _feature, value)
+                        setattr(object, f, value)
                         year_month[ym] = object
 
             updates[f] = year_month

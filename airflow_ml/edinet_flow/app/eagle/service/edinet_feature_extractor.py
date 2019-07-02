@@ -1,15 +1,53 @@
 import tempfile
 import importlib
-from datetime import datetime
-import calendar
+import datetime
 from django.db import transaction
 import edinet
+from eagle.models import EDINETDocument
 
 
 class EDINETFeatureExtractor():
 
     def __init__(self, storage):
         self.storage = storage
+
+    @classmethod
+    def annual_features(cls):
+        return [
+            "executive_state.number_of_executives"
+        ]
+
+    def extract_from_documents(self, report_kind, features=(),
+                               submitted_date=None,
+                               dryrun=False):
+        _features = []
+        documents = []
+        print([m.submitted_date for m in EDINETDocument.objects.all()])
+        print([m.edinet_document_type for m in EDINETDocument.objects.all()])
+        print([m.withdraw_status for m in EDINETDocument.objects.all()])
+        print([m.ordinance_code for m in EDINETDocument.objects.all()])
+        if report_kind == "annual":
+            _features = self.annual_features
+            documents = EDINETDocument.objects.filter(
+                edinet_document_type__in=(120, 130),
+                withdraw_status="0",
+                ordinance_code="010",
+                submitted_date__range=(
+                    datetime.datetime.combine(submitted_date, datetime.time.min),
+                    datetime.datetime.combine(submitted_date, datetime.time.max)
+                )
+            )
+
+        print(documents)
+        if len(features) > 0:
+            _features = [f for f in _features in features]
+
+        extracteds = []
+        for d in documents:
+            e = self.extract_feature(d, _features, dryrun=dryrun)
+            extracteds.append(e)
+
+        return extracteds
 
     def extract_feature(self, document, feature_or_features,
                         dryrun=False):

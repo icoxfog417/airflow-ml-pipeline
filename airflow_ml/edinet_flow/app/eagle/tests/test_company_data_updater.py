@@ -65,11 +65,11 @@ class TestCompanyDataUpdater(TransactionTestCase):
 
         service = CompanyDataUpdater()
         companies = EDINETCompany.objects.all()
-        feature_name = "executive_state.number_of_executives"
+        feature_name = "number_of_executives"
 
         for c in companies:
             updates = service.update_company_data(
-                        c, date, feature_name, dryrun=True)
+                        c, date, dryrun=True)
 
             self.assertIn(feature_name, updates)
             if c.edinet_code == "E33416":

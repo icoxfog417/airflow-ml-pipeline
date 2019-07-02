@@ -34,3 +34,5 @@ class Storage():
 
     @classmethod
     def local(cls, root):
+        from airflow_ml.edinet_flow.storage.local_storage import LocalStorage
+        return LocalStorage(root)

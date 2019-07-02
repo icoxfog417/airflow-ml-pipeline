@@ -1,4 +1,5 @@
 import unicodedata
+from django.utils.timezone import make_aware
 from eagle.models import EDINETCompany, EDINETDocument
 
 
@@ -63,7 +64,7 @@ class EDINETDocumentRegister():
         else:
             _document.period_end = document.period_end
 
-        _document.submitted_date = document.submitted_date
+        _document.submitted_date = make_aware(document.submitted_date)
         _document.lang = "ja"
         _document.path = xbrl_path
         _document.xbrl_path = xbrl_path
@@ -78,7 +79,11 @@ class EDINETDocumentRegister():
         _document.subsidiary_edinet_code = document.subsidiary_edinet_code
         _document.submit_reason = reason
         _document.parent_document_id = parent
-        _document.operated_date = document.operated_date
+        if document.operated_date is None:
+            _document.operated_date = document.operated_date
+        else:
+            _document.operated_date = make_aware(document.operated_date)
+
         _document.withdraw_status = document.withdraw_status
         _document.operation_status = document.operation_status
         _document.disclosure_status = document.disclosure_status

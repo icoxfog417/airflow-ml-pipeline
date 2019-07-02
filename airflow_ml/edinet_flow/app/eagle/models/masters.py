@@ -7,8 +7,8 @@ class Company(models.Model):
 
 
 class EDINETCompany(Company):
-    jcn = models.CharField(max_length=13)
     edinet_code = models.CharField(max_length=6)
+    jcn = models.CharField(max_length=13, null=True)
     sec_code = models.CharField(max_length=5, null=True)
     fund_code = models.CharField(max_length=6, null=True)
 

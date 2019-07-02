@@ -17,7 +17,10 @@ from edinet.client.document_list_client import BaseDocumentListClient
 
 import django
 django.setup()
+from eagle.models import EDINETCompany
 from eagle.service import EDINETDocumentRegister
+from eagle.service import EDINETFeatureExtractor
+from eagle.service import CompanyDataUpdater
 
 
 class EDINETMixin():
@@ -48,6 +51,8 @@ class EDINETMixin():
             return f"documents/{date.strftime('%Y-%m-%d')}"
 
     def get_file_path(self, document):
+        if document.submitted_date is None:
+            raise Exception(document.document_id)
         prefix = self.document_path_at(document.submitted_date)
         files = self.storage.list_objects(prefix)
         result = {
@@ -129,7 +134,6 @@ class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
                     name = name.split("__")[0]
                     name = name.split("_")[0]
                     file_name = name + ext
-                    print(file_name)
                     path = self.document_path_at(execution_date, file_name)
                     self.storage.upload_file(path, content_path=content_path)
 
@@ -181,7 +185,6 @@ class RegisterDocumentOperator(BaseOperator, EDINETMixin):
         service = EDINETDocumentRegister()
 
         registered = 0
-        print(len(self._targets))
         for d in self._targets:
             path = self.get_file_path(d)
             service.register_document(d, path["xbrl"], path["pdf"])
@@ -190,22 +193,14 @@ class RegisterDocumentOperator(BaseOperator, EDINETMixin):
         self.log.info("{} documents are registered.".format(registered))
 
 
-class UpdateFeaturesOperator(BaseOperator, EDINETMixin):
-    """ Update features from documents """
+class ExtractDocumentFeaturesOperator(BaseOperator, EDINETMixin):
+    """ Extract feature of registered document """
 
     @apply_defaults
-    def __init__(self, features=None,
+    def __init__(self, report_kinds=(), features=(),
                  max_retrieve=-1, *args, **kwargs):
+        self.report_kinds = report_kinds
         self.features = features
-
-        if self.features is None:
-            self.features = {
-                "annual": [
-                    "executive_state.number_of_executives"
-                ]
-            }
-
-        self.max_retrieve = max_retrieve
         super().__init__(*args, **kwargs)
 
     def execute(self, context):
@@ -215,89 +210,44 @@ class UpdateFeaturesOperator(BaseOperator, EDINETMixin):
                            execution_date.strftime("%Y/%m/%d")))
             return False
 
-        documents = self.get_documents_at(execution_date)
-        if self.max_retrieve > 0:
-            documents = documents[:self.max_retrieve]
-        
-        for d in documents:
-            
+        service = EDINETFeatureExtractor(self.storage)
+        for r in self.report_kinds:
+            service.extract_from_documents(r, self.features,
+                submitted_date=execution_date)
 
 
-
-
-
-"""
-
-class EDINETGetDocumentsOperator(BaseOperator):
+class UpdateCompanyDataOperator(BaseOperator, EDINETMixin):
+    """ Update company data from feature of documents """
 
     @apply_defaults
-    def __init__(self, filter_func=None, *args, **kwargs):
-        self.filter_func = filter_func
+    def __init__(self, report_kinds, features=(),
+                 max_retrieve=-1, *args, **kwargs):
+        self.report_kinds = report_kinds
+        self.features = features
         super().__init__(*args, **kwargs)
 
     def execute(self, context):
-        self.log.info("Retreave list of documents from EDINET @ {}.".format(
-            self.start_date.strftime("%Y/%m/%d")))
-
-        client = api.DocumentListClient()
-        documents = client.get(self.start_date)
-        total_count = len(documents)
-        if self.filter_func:
-            documents = [d for i, d in enumerate(documents)
-                         if self.filter_func(i, d)]
-
-        self.log.info("Dealing {}/{} documents.".format(
-                        len(documents), total_count))
-
-        document_ids = [d.document_id for d in documents]
-        return document_ids
-
-
-class EDINETGetDocumentSensor(BaseSensorOperator):
-
-    @apply_defaults
-    def __init__(self, document_type="xbrl", *args, **kwargs):
-        self.document_type = document_type
-        self._next_document_index = -1
-        super().__init__(*args, **kwargs)
-
-    def poke(self, context):
-        document_ids = context["task_instance"].xcom_pull(
-                        task_ids="edinet_get_document_list")
-
-        if self._next_document_index < 0:
-            self.log.info("Download the {} documents from EDINET.".format(
-                            len(document_ids)))
-            self._next_document_index = 0
-
-        client = api.DocumentClient()
-        default_path = os.path.join(os.path.dirname(__file__), "../../data")
-
-        gcp_bucket = Variable.get("gcp_bucket", default_var="")
-        save_dir = default_path if not gcp_bucket else ""
-
-        document_id = document_ids[self._next_document_index]
-        self.log.info("Dealing {}/{} documents.".format(
-                        (self._next_document_index + 1), len(document_ids)))
-        if self.document_type == "pdf":
-            path = client.get_pdf(document_id, save_dir)
-        else:
-            path = client.get_xbrl(document_id, save_dir)
-
-        if gcp_bucket:
-            from google.cloud import storage
-            client = storage.Client()
-            bucket = client.get_bucket(gcp_bucket)
-            exact_name = str(path).split("__")[-1]
-            bucket.blob(exact_name).upload_from_filename(filename=str(path))
-
-        self._next_document_index += 1
-
-        if self._next_document_index == len(document_ids):
-            return True
-        else:
+        execution_date = context["execution_date"]
+        if not self.storage.exists(self.list_path_at(execution_date)):
+            self.log.info("Document @ {} does not found.".format(
+                           execution_date.strftime("%Y/%m/%d")))
             return False
 
+        service = CompanyDataUpdater()
+        companies = EDINETCompany.objects.all()
+        date = datetime(
+            execution_date.year, execution_date.month, execution_date.day)
+        for r in self.report_kinds:
+            if r == "annual":
+                date = datetime(date.year - 1, date.month, date.day)
+            else:
+                self.log.info("Report kind {} does not supported".format(r))
+                return False
+
+            for c in companies:
+                service.update_company_data(c, date, self.features)
+
+"""
 
 yesterday = datetime.today() - timedelta(1)
 
