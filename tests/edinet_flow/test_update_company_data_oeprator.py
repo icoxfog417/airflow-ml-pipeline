@@ -14,8 +14,8 @@ from eagle.models.masters import EDINETDocument
 from eagle.models import NumberOfExecutives
 
 
-DEFAULT_DATE = timezone.datetime(2019, 6, 7)
-# https://disclosure.edinet-fsa.go.jp/api/v1/documents.json?type=2&date=2019-06-07
+DEFAULT_DATE = timezone.datetime(2018, 9, 10)
+# https://disclosure.edinet-fsa.go.jp/api/v1/documents.json?type=2&date=2018-09-10
 
 
 class TestUpdateCompanyDataOperator(TestCase):
@@ -30,12 +30,12 @@ class TestUpdateCompanyDataOperator(TestCase):
         get_list = GetEDINETDocumentListOperator(
                 task_id="get_document_list", dag=cls.prepare_dag)
         get_document = GetEDINETDocumentSensor(
-                max_retrieve=3, document_types=("120",),
+                max_retrieve=3, document_ids=("S100E2NM","S100E2S2"),
                 task_id="get_document", dag=cls.prepare_dag, poke_interval=2)
         register_document = RegisterDocumentOperator(
-                max_retrieve=3,
                 task_id="register_document", dag=cls.prepare_dag)
         extract_feature = ExtractDocumentFeaturesOperator(
+                report_kinds=("annual",),
                 task_id="extract_feature", dag=cls.prepare_dag)
 
         cls.prepare_dag.clear()
@@ -76,6 +76,7 @@ class TestUpdateCompanyDataOperator(TestCase):
                  ignore_ti_state=True)
 
         documents = EDINETDocument.objects.all()
+        self.assertGreater(len(documents), 0)
         for d in documents:
             self.assertTrue(
                 NumberOfExecutives.objects.filter(document=d).exists())

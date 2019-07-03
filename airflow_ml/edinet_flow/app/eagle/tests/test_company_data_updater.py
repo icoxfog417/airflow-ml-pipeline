@@ -40,7 +40,6 @@ class TestCompanyDataUpdater(TransactionTestCase):
             pdf = t.document_id + "_2.pdf"
             xbrl_path = os.path.join(self.DATA_DIR, xbrl)
             pdf_path = os.path.join(self.DATA_DIR, pdf)
-            print(t.document_id)
             if not os.path.exists(xbrl_path):
                 if t.has_xbrl:
                     t.get_xbrl(save_dir=self.DATA_DIR)
@@ -68,7 +67,7 @@ class TestCompanyDataUpdater(TransactionTestCase):
         feature_name = "number_of_executives"
 
         for c in companies:
-            updates = service.update_company_data(
+            updates = service.update_by_company_date(
                         c, date, dryrun=True)
 
             self.assertIn(feature_name, updates)

@@ -11,7 +11,7 @@ class EDINETFeatureExtractor():
     def __init__(self, storage):
         self.storage = storage
 
-    @classmethod
+    @property
     def annual_features(cls):
         return [
             "executive_state.number_of_executives"
@@ -22,10 +22,6 @@ class EDINETFeatureExtractor():
                                dryrun=False):
         _features = []
         documents = []
-        print([m.submitted_date for m in EDINETDocument.objects.all()])
-        print([m.edinet_document_type for m in EDINETDocument.objects.all()])
-        print([m.withdraw_status for m in EDINETDocument.objects.all()])
-        print([m.ordinance_code for m in EDINETDocument.objects.all()])
         if report_kind == "annual":
             _features = self.annual_features
             documents = EDINETDocument.objects.filter(
@@ -38,7 +34,6 @@ class EDINETFeatureExtractor():
                 )
             )
 
-        print(documents)
         if len(features) > 0:
             _features = [f for f in _features in features]
 
@@ -52,7 +47,7 @@ class EDINETFeatureExtractor():
     def extract_feature(self, document, feature_or_features,
                         dryrun=False):
 
-        features = []
+        features = feature_or_features
         if isinstance(feature_or_features, str):
             features = [feature_or_features]
 

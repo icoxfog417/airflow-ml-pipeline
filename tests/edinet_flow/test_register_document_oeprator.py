@@ -58,7 +58,6 @@ class TestRegisterDocumentOperator(TestCase):
 
     def test_register_document(self):
         task = RegisterDocumentOperator(
-                max_retrieve=3, document_types=("120",),
                 task_id="register_document", dag=self.dag)
 
         task.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE,

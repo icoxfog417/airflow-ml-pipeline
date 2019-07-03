@@ -50,24 +50,32 @@ class EDINETMixin():
         else:
             return f"documents/{date.strftime('%Y-%m-%d')}"
 
-    def get_file_path(self, document):
-        if document.submitted_date is None:
-            raise Exception(document.document_id)
-        prefix = self.document_path_at(document.submitted_date)
+    def get_files_at(self, date):
+        prefix = self.document_path_at(date)
         files = self.storage.list_objects(prefix)
-        result = {
-            "xbrl": "",
-            "pdf": ""
-        }
+
+        file_paths = {}
         for f in files:
             name = os.path.basename(f)
-            if name.startswith(document.document_id):
-                if name.endswith(".xbrl"):
-                    result["xbrl"] = f
-                elif name.endswith(".pdf"):
-                    result["pdf"] = f
+            root, ext = os.path.splitext(name)
+            if root not in file_paths:
+                file_paths[root] = {
+                    "xbrl": "",
+                    "pdf": ""
+                }
+            if ext == ".xbrl":
+                file_paths[root]["xbrl"] = f
+            elif ext == ".pdf":
+                file_paths[root]["pdf"] = f
 
-        return result
+        return file_paths
+
+    def get_file_of(self, document):
+        files = self.get_files_at(document.submitted_date)
+        if document.document_id in files:
+            return files[document.document_id]
+        else:
+            return {}
 
 
 class GetEDINETDocumentListOperator(BaseOperator, EDINETMixin):
@@ -89,11 +97,9 @@ class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
     """ Save files from stored document list file."""
 
     @apply_defaults
-    def __init__(self, max_retrieve=-1, document_types=(),
-                 file_types=("xbrl", "pdf"), *args, **kwargs):
-        self.max_retrieve = max_retrieve
-        self.document_types = document_types
-        self.file_types = file_types
+    def __init__(self, document_ids=(), max_retrieve=-1, *args, **kwargs):
+        self._document_ids = document_ids
+        self._max_retrieve = max_retrieve
         self._index = 0
         self._targets = []
         super().__init__(*args, **kwargs)
@@ -106,12 +112,13 @@ class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
             return True
         elif len(self._targets) == 0:
             documents = self.get_documents_at(execution_date)
+            self._targets = documents.list
+            if len(self._document_ids) > 0:
+                self._targets = [d for d in self._targets
+                                 if d.document_id in self._document_ids]
 
-            if len(self.document_types) == 0:
-                self._targets = documents.list
-            else:
-                self._targets = [d for d in documents.list
-                                 if d.doc_type_code in self.document_types]
+            if self._max_retrieve > 0:
+                self._targets = self._targets[:self._max_retrieve]
 
         if len(self._targets) == 0:
             self.log.info("No target document exist @ {}.".format(
@@ -121,7 +128,7 @@ class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
 
         document = self._targets[self._index]
 
-        for file_type in self.file_types:
+        for file_type in ("xbrl", "pdf"):
             content_path = ""
             try:
                 if file_type == "xbrl" and document.has_xbrl:
@@ -141,27 +148,25 @@ class GetEDINETDocumentSensor(BaseSensorOperator, EDINETMixin):
                 self.log.error(ex)
 
         self._index += 1
-
-        if self.max_retrieve > 0:
-            if self._index < self.max_retrieve:
-                return False
-            else:
-                return True
-        elif self._index < len(self._targets):
-            return False
-        else:
+        if self._index == len(self._targets):
+            self._targets.clear()
+            self._index = 0
             return True
+        else:
+            return False
 
 
 class RegisterDocumentOperator(BaseOperator, EDINETMixin):
     """ Register documents from stored list and documents."""
 
     @apply_defaults
-    def __init__(self, max_retrieve=-1, document_types=(),
+    def __init__(self, max_retrieve=-1,
+                 document_types=(), ordinance_code=(), withdraw_status="",
                  *args, **kwargs):
         self.max_retrieve = max_retrieve
-        self.document_types = document_types
-        self._targets = []
+        self._document_types = document_types
+        self._ordinance_code = ordinance_code
+        self._withdraw_status = withdraw_status
         super().__init__(*args, **kwargs)
 
     def execute(self, context):
@@ -171,22 +176,30 @@ class RegisterDocumentOperator(BaseOperator, EDINETMixin):
                            execution_date.strftime("%Y/%m/%d")))
             return False
 
+        files = self.get_files_at(execution_date)
         documents = self.get_documents_at(execution_date)
+        self._targets = [d for d in documents.list
+                         if d.document_id in files]
 
-        if len(self.document_types) == 0:
-            self._targets = documents.list
-        else:
-            self._targets = [d for d in documents.list
-                             if d.doc_type_code in self.document_types]
+        if len(self._document_types) > 0:
+            self._targets = [d for d in self._targets
+                             if d.doc_type_code in self._document_types]
+
+        if len(self._ordinance_code) > 0:
+            self._targets = [d for d in self._targets
+                             if d.ordinance_code in self._ordinance_code]
+
+        if len(self._withdraw_status) > 0:
+            self._targets = [d for d in self._targets
+                             if d.withdraw_status == self._withdraw_status]
 
         if self.max_retrieve > 0:
             self._targets = self._targets[:self.max_retrieve]
 
         service = EDINETDocumentRegister()
-
         registered = 0
         for d in self._targets:
-            path = self.get_file_path(d)
+            path = self.get_file_of(d)
             service.register_document(d, path["xbrl"], path["pdf"])
             registered += 1
 
@@ -212,7 +225,8 @@ class ExtractDocumentFeaturesOperator(BaseOperator, EDINETMixin):
 
         service = EDINETFeatureExtractor(self.storage)
         for r in self.report_kinds:
-            service.extract_from_documents(r, self.features,
+            service.extract_from_documents(
+                r, self.features,
                 submitted_date=execution_date)
 
 
@@ -220,9 +234,8 @@ class UpdateCompanyDataOperator(BaseOperator, EDINETMixin):
     """ Update company data from feature of documents """
 
     @apply_defaults
-    def __init__(self, report_kinds, features=(),
+    def __init__(self, features=(),
                  max_retrieve=-1, *args, **kwargs):
-        self.report_kinds = report_kinds
         self.features = features
         super().__init__(*args, **kwargs)
 
@@ -234,18 +247,8 @@ class UpdateCompanyDataOperator(BaseOperator, EDINETMixin):
             return False
 
         service = CompanyDataUpdater()
-        companies = EDINETCompany.objects.all()
-        date = datetime(
-            execution_date.year, execution_date.month, execution_date.day)
-        for r in self.report_kinds:
-            if r == "annual":
-                date = datetime(date.year - 1, date.month, date.day)
-            else:
-                self.log.info("Report kind {} does not supported".format(r))
-                return False
+        service.update_by_submitted_date(execution_date, self.features)
 
-            for c in companies:
-                service.update_company_data(c, date, self.features)
 
 """
 

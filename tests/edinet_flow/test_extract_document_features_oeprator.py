@@ -13,8 +13,8 @@ from eagle.models.masters import EDINETDocument
 from eagle.models import NumberOfExecutives
 
 
-DEFAULT_DATE = timezone.datetime(2019, 6, 4)
-# https://disclosure.edinet-fsa.go.jp/api/v1/documents.json?type=2&date=2019-06-04
+DEFAULT_DATE = timezone.datetime(2018, 9, 10)
+# https://disclosure.edinet-fsa.go.jp/api/v1/documents.json?type=2&date=2018-09-10
 
 
 class TestExtractDocumentFeaturesOperator(TestCase):
@@ -29,10 +29,9 @@ class TestExtractDocumentFeaturesOperator(TestCase):
         get_list = GetEDINETDocumentListOperator(
                 task_id="get_document_list", dag=cls.prepare_dag)
         get_document = GetEDINETDocumentSensor(
-                max_retrieve=3, document_types=("120", "130"),
+                max_retrieve=3, document_ids=("S100E2NM", "S100E2S2"),
                 task_id="get_document", dag=cls.prepare_dag, poke_interval=2)
         register_document = RegisterDocumentOperator(
-                max_retrieve=3,
                 task_id="register_document", dag=cls.prepare_dag)
         cls.prepare_dag.clear()
         get_list.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
